@@ -8,6 +8,9 @@ import {
   PolyFillType,
   PolyType,
 } from '../utils/clipper';
+import * as b2 from '@flyover/box2d';
+import {b2ChainShape, b2CircleShape, b2ShapeType, b2Vec2} from '@flyover/box2d';
+import {b2PolygonShape} from '@flyover/box2d/Box2D/Collision/Shapes/b2PolygonShape';
 
 const worldItems = [
   buildMap(
@@ -23,10 +26,35 @@ const worldItems = [
     '-827.949 415.35 -853.089 339.401 -863.849 303.791 -865.219 283.521 -859.779 265.461 -849.94 260.541 -842.06 247.021 -853.57 210.061 -856.2 170.791 -869.34 149.571 -877.94 125.811 -878.33 93.4807 -873.45 81.4008 -865.05 76.2008 -864.25 69.0008 -855.75 66.8008 -861.479 57.8307 -862.76 44.4608 -856.45 26.9008 -843.01 14.8208 -846.82 -1.14932 -868.349 -13.1493 -881.599 -3.05933 -881.74 -8.0293 -872.779 -14.3293 -881.459 -21.1193 -876.349 -24.4793 -870.19 -17.7593 -868.789 -27.6992 -866.2 -27.4893 -866.13 -17.8293 -846.67 -5.22931 -844.36 -13.3493 -836.23 -20.0593 -836.72 -31.8293 -839.44 -42.0693 -835.95 -50.0793 -843.47 -50.4793 -843.79 -53.9993 -832.99 -53.9193 -829.07 -66.8293 -827.979 -79.8293 -835.38 -92.5293 -817.68 -90.1292 -803.88 -86.2292 -792.48 -75.0293 -801.18 -66.5293 -804.58 -50.8293 -794.41 -43.5994 -797.02 -37.5694 -801.25 -35.2294 -800.829 -24.4994 -812.169 -12.9494 -805.169 -6.50943 -802.799 -4.52933 -778.2 -13.5893 -774.479 -21.9893 -772.02 -21.0893 -771.84 -13.4693 -767.7 -12.7493 -769.5 -10.1693 -775.08 -10.0493 -775.5 -3.38931 -779.039 -2.84933 -779.52 -8.06931 -801.239 0.210663 -801.649 7.88071 -811.989 18.3307 -802.529 25.3707 -794.889 36.3907 -790.409 48.2907 -788.379 55.0807 -781.799 56.1306 -776.969 48.1507 -774.729 33.1007 -768.359 18.8907 -752.94 4.40067 -738.6 -5.91931 -736.6 -9.69928 -746.57 -51.2593 -746.64 -63.9193 -743.16 -72.0793 -703.2 -99.3193 -699.21 -103.769 -698.71 -142.999 -695.88 -149.809 -688.59 -154.399 -669.12 -157.059 -648.84 -156.929 -636.1 -157.449 -626.43 -170.909 -617.79 -174.749 -604.83 -171.749 -580.92 -160.529 -567.14 -142.719 -565.71 -119.059 -565.45 -112.559 -557.63 -114.479 -550.07 -112.079 -542.27 -81.1194 -529.09 -68.2394 -523.96 -49.6695 -521.88 -30.5595 -511.22 -30.2995 -493.02 -27.6995 -475.36 -13.2495 -446.23 25.8505 -415.22 60.7804 -395.58 84.8904 -390.65 95.7704 -390.45 108.31 -390.87 119.93 -381.35 125.25 -375.33 132.67 -374.37 143.61 -391.85 199.34 -394.93 224.27 -385.48 222.17 -379.18 221.54 -370.36 225.95 -363.16 235.03 -360.22 247.63 -364.84 262.33 -368.62 283.96 -371.55 308.05 -375.19 340.55 -391.34 423.84',
   ),
 ];
+const box2dWorld = new b2.b2World({x: 0, y: 10});
 
 export function Diagram() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const world = useRef<Paths>(worldItems);
+
+  function makeBodies() {
+    let bodies = box2dWorld.GetBodyList();
+    while (bodies) {
+      if (bodies.GetUserData()?.land) {
+        box2dWorld.DestroyBody(bodies);
+      }
+      bodies = bodies.m_next;
+    }
+    for (const path of world.current) {
+      const bodyDef = new b2.b2BodyDef();
+      bodyDef.position.Set(0, 0);
+      const body = box2dWorld.CreateBody(bodyDef);
+      const shape = new b2.b2ChainShape();
+      shape.CreateChain(path);
+      body.CreateFixture(shape);
+      body.SetUserData({land: true});
+      body.SetType(0);
+    }
+  }
+
+  useEffect(() => {
+    makeBodies();
+  }, []);
 
   const onBomb = (x: number, y: number) => {
     let clipper = new Clipper();
@@ -40,11 +68,31 @@ export function Diagram() {
     console.log(`Clip has ${bomb.length} polys`);
     console.log(`Solution has ${solution.length} polys`);
     world.current = solution;
-    draw();
+
+    makeBodies();
+  };
+  const onDrop = (x: number, y: number) => {
+    const bodyDef = new b2.b2BodyDef();
+    bodyDef.position.Set(x, y);
+    const body = box2dWorld.CreateBody(bodyDef);
+    const mass = new b2.b2MassData();
+    mass.mass = 500;
+    body.SetMassData(mass);
+    const fixtureDef = new b2.b2FixtureDef();
+    fixtureDef.shape = new b2.b2CircleShape(20);
+    fixtureDef.density = 0.1;
+    fixtureDef.restitution = 0.9;
+    body.CreateFixture(fixtureDef);
+    body.SetUserData(undefined);
+    body.SetType(2);
   };
   useEffect(() => {
     if (canvasRef.current) {
-      draw();
+      function doDraw() {
+        draw();
+        requestAnimationFrame(doDraw);
+      }
+      requestAnimationFrame(doDraw);
     }
   }, [canvasRef.current]);
 
@@ -52,18 +100,38 @@ export function Diagram() {
     const canvas = canvasRef.current!;
     const context = canvas.getContext('2d')!;
     context.fillStyle = 'grey';
-    context.fillRect(0, 0, 2000, 2000);
-    for (const path of world.current) {
+    context.fillRect(0, 0, 2000, 1000);
+    box2dWorld.Step(0.16, 6, 2);
+
+    let body = box2dWorld.GetBodyList();
+    while (body) {
       context.save();
       context.beginPath();
-      context.moveTo(path[0].x, path[0].y);
-      for (const point of path) {
-        context.lineTo(point.x, point.y);
+      const fixture = body.GetFixtureList()!;
+      const shape = fixture.GetShape()!;
+      if (shape.GetType() === b2ShapeType.e_chainShape) {
+        assertType<b2ChainShape>(shape);
+        context.moveTo(shape.m_vertices[0].x, shape.m_vertices[0].y);
+        for (const point of shape.m_vertices) {
+          context.lineTo(point.x, point.y);
+        }
+        context.fillStyle = 'red';
+        context.fill();
+      } else if (shape.GetType() === b2ShapeType.e_circleShape) {
+        assertType<b2CircleShape>(shape);
+
+        DrawingUtils.pathCircle(
+          context,
+          body.GetPosition().x,
+          body.GetPosition().y,
+          shape.m_radius,
+        );
+        context.fillStyle = 'blue';
+        context.fill();
       }
-      context.fillStyle = 'red';
-      context.fill();
 
       context.restore();
+      body = body.m_next;
     }
   }
 
@@ -71,8 +139,15 @@ export function Diagram() {
     <div className="h-screen p-12 bg-yellow-100 font-sans tracking-wider">
       <canvas
         width={2000}
-        height={2000}
-        onClick={(e) => onBomb(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
+        height={1000}
+        onContextMenu={(e) => e.preventDefault()}
+        onMouseDown={(e) => {
+          e.button === 0
+            ? onBomb(e.nativeEvent.offsetX, e.nativeEvent.offsetY)
+            : onDrop(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+          e.preventDefault();
+          return false;
+        }}
         ref={canvasRef}></canvas>
     </div>
   );
@@ -105,4 +180,78 @@ function buildMap(map: string) {
     points.push(new Point(parseFloat(m[i]) + 1000, parseFloat(m[i + 1]) + 500));
   }
   return points;
+}
+export function assertType<T>(assertion: any): asserts assertion is T {}
+export class DrawingUtils {
+  static fillRect(
+    context: CanvasRenderingContext2D,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+  ) {
+    if (Math.max(x2 - x1, 0) === 0 || Math.max(y2 - y1, 0) === 0) {
+      return;
+    }
+    context.fillRect(x1, y1, Math.max(x2 - x1, 0), Math.max(y2 - y1, 0));
+  }
+
+  static pathCircle(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    radius: number,
+  ) {
+    context.beginPath();
+    context.arc(x, y, radius, 0, 2 * Math.PI);
+  }
+  static pathEllipse(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    radiusX: number,
+    radiusY: number,
+  ) {
+    context.beginPath();
+    context.ellipse(x, y, radiusX, radiusY, 0, 0, 2 * Math.PI);
+  }
+
+  static drawGrid({
+    context,
+    scale,
+    translateX,
+    translateY,
+    gridSize,
+    width,
+    height,
+    lineWidth,
+  }: {
+    context: CanvasRenderingContext2D;
+    scale: number;
+    translateX: number;
+    translateY: number;
+    gridSize: number;
+    width: number;
+    height: number;
+    lineWidth: number;
+  }) {
+    context.save();
+    context.scale(scale, scale);
+
+    context.translate(
+      Math.round(translateX) - lineWidth / 2,
+      Math.round(translateY) - lineWidth / 2,
+    );
+
+    context.strokeStyle = '#ccc';
+    context.lineWidth = lineWidth;
+    const squareSize = gridSize;
+    for (let x = 0; x <= width; x += squareSize) {
+      for (let y = 0; y <= height; y += squareSize) {
+        context.strokeRect(x, 0, lineWidth, height);
+        context.strokeRect(0, y, width, lineWidth);
+      }
+    }
+    context.restore();
+  }
 }
