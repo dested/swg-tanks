@@ -11,12 +11,25 @@ import {
 import * as b2 from '@flyover/box2d';
 import {b2ChainShape, b2CircleShape, b2ShapeType, b2Vec2} from '@flyover/box2d';
 import grass from './grass_top.png';
-const image = new Image();
-image.src = grass;
-image.onload = (e) => {
-  (image as any).loaded = true;
+import explosion from './tank_explosion7.png';
+import hills from './uncolored_hills.png';
+const grassImage = new Image();
+grassImage.src = grass;
+grassImage.onload = (e) => {
+  (grassImage as any).loaded = true;
+};
+const hillsImage = new Image();
+hillsImage.src = hills;
+hillsImage.onload = (e) => {
+  (hillsImage as any).loaded = true;
+};
+const explosionImage = new Image();
+explosionImage.src = explosion;
+explosionImage.onload = (e) => {
+  (explosionImage as any).loaded = true;
 };
 let grassPattern: CanvasPattern;
+let explosionPattern: CanvasPattern;
 const worldItems = [
   buildMap(
     '822.142 45.6898 833.053 51.7295 839.803 68.1994 840.613 83.3193 843.313 99.7892 845.473 115.179 846.553 131.109 849.793 146.769 868.073 151.429 870.393 163.619 872.493 179.819 876.693 195.419 884.563 211.369 911.863 235.939 921.943 245.179 922.573 260.929 923.143 275.949 918.803 294.239 916.013 308.189 913.843 319.659 923.143 347.249 935.983 391.689 774.643 402.009 783.173 365.849 784.013 348.209 777.293 333.719 758.093 300.699 758.303 291.669 767.612 262.909 766.662 244.709 774.892 221.559 786.802 197.029 788.622 179.969 787.082 170.289 776.082 148.289 776.742 141.029 785.322 124.969 791.922 115.069 797.572 94.0092 802.842 69.5294 807.432 58.4795 811.512 50.6595 816.612 46.9196',
@@ -104,14 +117,15 @@ export function Diagram() {
   function draw() {
     const canvas = canvasRef.current!;
     const context = canvas.getContext('2d')!;
-    if (!(image as any).loaded) {
+    if (!(grassImage as any).loaded) {
       return;
     }
-    const pattern =
-      grassPattern || (grassPattern = context.createPattern(image, 'repeat')!);
+    const gPattern =
+      grassPattern ||
+      (grassPattern = context.createPattern(grassImage, 'repeat')!);
 
-    context.fillStyle = 'grey';
-    context.fillRect(0, 0, 2000, 1000);
+    context.clearRect(0, 0, 2000, 1000);
+    context.drawImage(hillsImage, 0, 0, 2000, 1000);
     box2dWorld.Step(0.16, 6, 2);
 
     let body = box2dWorld.GetBodyList();
@@ -126,19 +140,21 @@ export function Diagram() {
         for (const point of shape.m_vertices) {
           context.lineTo(point.x, point.y);
         }
-        context.fillStyle = pattern;
+        context.fillStyle = gPattern;
         context.fill();
       } else if (shape.GetType() === b2ShapeType.e_circleShape) {
         assertType<b2CircleShape>(shape);
-
-        DrawingUtils.pathCircle(
-          context,
-          body.GetPosition().x,
-          body.GetPosition().y,
-          shape.m_radius,
+        context.save();
+        context.translate(body.GetPosition().x, body.GetPosition().y);
+        context.rotate(body.GetAngle());
+        context.drawImage(
+          explosionImage,
+          -shape.m_radius,
+          -shape.m_radius,
+          shape.m_radius * 2,
+          shape.m_radius * 2,
         );
-        context.fillStyle = 'blue';
-        context.fill();
+        context.restore();
       }
 
       context.restore();
@@ -147,7 +163,7 @@ export function Diagram() {
   }
 
   return (
-    <div className="h-screen p-12 bg-yellow-100 font-sans tracking-wider">
+    <div className="h-screen font-sans tracking-wider">
       <canvas
         width={2000}
         height={1000}
